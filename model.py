@@ -1,11 +1,9 @@
-import torchvision
+from typing import Optional
+
 import torch
 import torchvision.models as models
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import CrossEntropyLoss
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.optim import SGD
 from huggingface_hub import hf_hub_download
 
 
@@ -14,10 +12,11 @@ class MaskedConv2d(nn.Conv2d):
 
     def __init__(self, *args, **kwargs):
         super(MaskedConv2d, self).__init__(*args, **kwargs)
-        self._mask = torch.ones_like(self.weight)
+        self.register_buffer('_mask', torch.ones_like(self.weight))
+        self._mask = self._mask.to(self.weight.device)
 
     def forward(self, input):
-        weight = self.weight * self.mask
+        weight = self.weight * self._mask
         return F.conv2d(
             input,
             weight,
@@ -38,14 +37,15 @@ class MaskedConv2d(nn.Conv2d):
         assert (
             m.shape[0] == self.out_channels
         ), "Mask length must match the number of filters"
-        self._mask = m.view(-1, 1, 1, 1).float().expand_as(self.weight)
+        self._mask = m.view(-1, 1, 1, 1).float().expand_as(self.weight).to(self.weight.device)
 
 
 # TODO cleanup
-def replace_conv_with_custom(model):
+def replace_conv_with_custom(model, device):
+    chromosome_len = 0
     for name, module in model.named_children():
         # Recursively replace in submodules
-        replace_conv_with_custom(module)
+        chromosome_len += replace_conv_with_custom(module, device)
 
         if isinstance(module, nn.Conv2d):
             # Get arguments from existing module
@@ -59,21 +59,31 @@ def replace_conv_with_custom(model):
                 module.groups,
                 module.bias is not None,
                 module.padding_mode,
-            )
+            ).to(device)
             # Copy weights and bias if necessary
             # Useless, model was not loaded, but hey, maybe keep it jus tin case
-            new_module.weight = module.weight
+            new_module.weight.data.copy_(module.weight.data)
             if module.bias is not None:
-                new_module.bias = module.bias
+                new_module.bias.data.copy_(module.bias.data)
 
             # Replace the module in parent
             setattr(model, name, new_module)
+            chromosome_len += module.out_channels
+    return chromosome_len
 
 
-def load_model(device):
-    checkpoint_path = hf_hub_download(
-        repo_id="edadaltocg/resnet18_cifar10", filename="pytorch_model.bin"
-    )
+def set_mask_on(model, chromosome, i=0):
+    for name, module in model.named_children():
+        # Recursively replace in submodules
+        i = set_mask_on(module, chromosome, i)
+        if isinstance(module, nn.Conv2d):
+            module.mask = torch.Tensor(chromosome[i : (module.out_channels + i)])
+            # Replace the module in parent
+            i += module.out_channels
+    return i
+
+
+def load_model(device, model_path: Optional[str], logger):
     model = models.resnet18()
 
     model.conv1 = MaskedConv2d(
@@ -84,7 +94,16 @@ def load_model(device):
     )
     model.fc = torch.nn.Linear(in_features=512, out_features=10, bias=True)
 
-    replace_conv_with_custom(model)
-    model.load_state_dict(torch.load(checkpoint_path))
+    chromosome_len = replace_conv_with_custom(model, device)
+
+    if model_path:
+        logger.info(f"Loading model from path {model_path}")
+        model.load_state_dict(torch.load(model_path))
+    else:
+        logger.info(f"Downloading model from hugging face")
+        checkpoint_path = hf_hub_download(
+            repo_id="edadaltocg/resnet18_cifar10", filename="pytorch_model.bin"
+        )
+        model.load_state_dict(torch.load(checkpoint_path), strict=False)
     model = model.to(device)
-    return model
+    return model, chromosome_len

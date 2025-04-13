@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+# Train model on Metacentrum infrastructure
+# Arguments: git branch, model name, walltime
+
+# Builds on: https://github.com/bakajstep/KNN_Project2024/blob/main/metacetrum_scripts/test.sh
+# Which in turn builds on: https://github.com/roman-janik/diploma_thesis_program/blob/main/ner/start_training_ner.sh
+
+GIT_BRANCH="${1:-master}"
+WALLTIME="$2"
+BATCH_SIZE="$3"
+DATASET_DIR="$4"
+NOF_EPOCHS="$5"
+
+ARG_STRING=GIT_BRANCH="$GIT_BRANCH",BATCH_SIZE="$BATCH_SIZE",DATASET_DIR="$DATASET_DIR"
+ARG_STRING+=,DOWNLOAD_DATASET=True,NOF_EPOCHS="$NOF_EPOCHS"
+
+#if [ -n "$MODEL_IN_DIR" ]; then
+#  ARG_STRING+=,MODEL_IN_DIR="$MODEL_IN_DIR"
+#fi
+
+# -v list of environment variables to be given to the job
+qsub -v "$ARG_STRING" \
+  -l walltime="$WALLTIME" ./"$(dirname "$0")"/train_model_job

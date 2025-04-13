@@ -1,0 +1,4 @@
+deap
+huggingface-hub
+torch
+torchvision
