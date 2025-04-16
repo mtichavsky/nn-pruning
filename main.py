@@ -90,7 +90,13 @@ def parse_args():
     train_parser = subparsers.add_parser("train")
     train_parser.add_argument("--epochs", type=int, default=int(RESNET_EPOCHS))
     train_parser.add_argument(
-        "--model", type=Optional[str], default=None, help="Base model path"
+        "--model", type=str, default=None, help="Base model path"
+    )
+    train_parser.add_argument(
+        "--optimizer", type=str, default=None, help="Optimizer path"
+    )
+    train_parser.add_argument(
+        "--scheduler", type=str, default=None, help="Scheduler path"
     )
 
     evolve_parser = subparsers.add_parser("evolve")
@@ -187,13 +193,19 @@ def train_episode(optimizer, scheduler, criterion):
     return avg_loss, acc
 
 
-def train(model, epochs, save=True):
+def train(model, epochs, save=True, optimizer_path=None, scheduler_path=None):
     optimizer = SGD(
         model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0005, nesterov=True
     )
     scheduler = ReduceLROnPlateau(
         optimizer, factor=0.1, patience=3, threshold=0.001, mode="max"
     )
+    if optimizer_path:
+        logger.info(f"Loading optimizer from {optimizer_path}")
+        optimizer.load_state_dict(torch.load(optimizer_path, map_location=torch.device(device)))
+    if scheduler_path:
+        logger.info(f"Loading scheduler from {scheduler_path}")
+        scheduler.load_state_dict(torch.load(scheduler_path, map_location=torch.device(device)))
     criterion = CrossEntropyLoss()
     for i in range(epochs):
         logger.info(f"Epoch {i + 1}/{RESNET_EPOCHS}")
@@ -201,7 +213,7 @@ def train(model, epochs, save=True):
         logger.info("Train loss: {:.4f}, acc: {:.4f}".format(avg_loss, acc))
         correct, total = evaluate(model)
         logger.info(f"Test dataset precision: {correct / total}")
-        if i % 5 == 0:
+        if save and i % 5 == 0:
             torch.save(model.state_dict(), MODEL_OUT_DIR / f"model.{i:02d}.pth")
             torch.save(optimizer.state_dict(), MODEL_OUT_DIR / f"optimizer.{i:02d}.pth")
             torch.save(scheduler.state_dict(), MODEL_OUT_DIR / f"scheduler.{i:02d}.pth")
@@ -214,7 +226,7 @@ if __name__ == "__main__":
     train_loader, test_loader = get_dataset_loaders()
 
     if args.command == "train":
-        train(model, RESNET_EPOCHS)
+        train(model, RESNET_EPOCHS, scheduler_path=args.scheduler, optimizer_path=args.optimizer)
     elif args.command == "evolve":
         creator.create("FitnessMulti", base.Fitness, weights=(-1.0, 1.0))
         creator.create("Individual", list, fitness=creator.FitnessMulti)

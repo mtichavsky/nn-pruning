@@ -60,7 +60,7 @@ pip install --upgrade pip
 TMPDIR="../tmp" pip install torch==2.6.0 --extra-index-url https://download.pytorch.org/whl/cu113 -r requirements.txt
 
 echo "Starting the training..."
-venv/bin/python main.py train --epochs "$NOF_EPOCHS"
+venv/bin/python main.py train --epochs "$NOF_EPOCHS" --model "/storage/brno12-cerit/home/tichavskym/results/train-35epochs/artifacts/model.35.pth" --optimizer "/storage/brno12-cerit/home/tichavskym/results/train-35epochs/artifacts/optimizer.35.pth" --scheduler "/storage/brno12-cerit/home/tichavskym/results/train-35epochs/artifacts/scheduler.35.pth"
 
 output_dir="$RES_DIR/train-$(date +%Y-%m-%d-%H-%M)"
 echo "Saving the results into the storage directory $output_dir"

@@ -98,7 +98,7 @@ def load_model(device, model_path: Optional[str], logger):
 
     if model_path:
         logger.info(f"Loading model from path {model_path}")
-        model.load_state_dict(torch.load(model_path))
+        model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
     else:
         logger.info(f"Downloading model from hugging face")
         checkpoint_path = hf_hub_download(
