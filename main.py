@@ -1,9 +1,10 @@
 import argparse
+import copy
 import logging
 import os
 from pathlib import Path
 import random
-from typing import Optional
+import json
 
 import torch
 import torchvision
@@ -15,7 +16,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchvision.transforms import transforms
 
 from model import load_model, set_mask_on
-import json
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", default=64))
 RESNET_EPOCHS = int(os.getenv("NOF_EPOCHS", default=30))
@@ -131,7 +131,8 @@ def generate_seed_population(chromosome_len, population_size):
 
 
 def evaluate_evolution(base_model, individual):
-    set_mask_on(base_model, individual)
+    model = copy.deepcopy(base_model)
+    set_mask_on(model, individual)
     correct, total = tune(model, INDIVIDUAL_EPOCHS)
     return sum(individual), float(correct) / total
 
@@ -221,7 +222,7 @@ def train(model, epochs, save=True, optimizer_path=None, scheduler_path=None):
             torch.save(scheduler.state_dict(), MODEL_OUT_DIR / f"scheduler.{i:02d}.pth")
 
 
-def tune(model, epochs):
+def tune(model, epochs, early_stopping=False):
     optimizer = SGD(
         model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0005, nesterov=True
     )
@@ -236,7 +237,7 @@ def tune(model, epochs):
         avg_loss, acc = train_episode(optimizer, scheduler, criterion)
         logger.info("Train loss: {:.4f}, acc: {:.4f}".format(avg_loss, acc))
         correct, total = evaluate(model)
-        if best_correct and correct < best_correct:
+        if early_stopping and best_correct and correct < best_correct:
             logger.info(f"Early stopping at epoch {i}")
             return best_correct, total
         best_correct = correct
@@ -290,9 +291,12 @@ if __name__ == "__main__":
             toolbox.attr_bool,
             chromosome_len,
         )
-        toolbox.register("population", generate_seed_population, chromosome_len)
+        #
         toolbox.register("evaluate", evaluate_evolution, model)
+        toolbox.register("mate", tools.cxTwoPoint) # Should not be used
         toolbox.register("mutate", tools.mutFlipBit, indpb=2 / chromosome_len)
+        toolbox.register("population", generate_seed_population, chromosome_len)
+        toolbox.register("select", tools.selNSGA2)
 
         first_front = run_evolution(toolbox, args.gens, args.mutation_prob)
         logger.info(first_front)
