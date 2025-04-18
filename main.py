@@ -102,7 +102,7 @@ def parse_args():
     evolve_parser.add_argument("--gens", type=int, default=20)
     evolve_parser.add_argument("--mutation-prob", type=float, default=0.2)
     evolve_parser.add_argument(
-        "--model", type=Optional[str], default=None, help="Base model path"
+        "--model", type=str, default=None, help="Base model path"
     )
 
     return parser.parse_args()
