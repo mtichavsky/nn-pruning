@@ -25,12 +25,15 @@ echo "just before clean_scratch"
 # Clean the SCRATCH directory upon the job termination
 trap 'clean_scratch' TERM EXIT
 
+export DATASET_DIR="/storage/brno12-cerit/home/tichavskym/data"
+
 printf "\-----------------------------------------------------------\n"
 printf "JOB ID:             %s\n" "$PBS_JOBID"
 printf "JOB NAME:           %s\n" "$PBS_JOBNAME"
 printf "JOB SERVER NODE:    %s\n" "$HOSTNAME"
 printf "START TIME:         %s\n" "$(date +%Y-%m-%d-%H-%M)"
 printf "GIT BRANCH:         %s\n" "$GIT_BRANCH"
+printf "DATASET_DIR:         %s\n" "$DATASET_DIR"
 printf "\-----------------------------------------------------------\n"
 
 # Long-term storage

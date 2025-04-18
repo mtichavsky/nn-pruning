@@ -1,9 +1,10 @@
 import argparse
+import copy
 import logging
 import os
 from pathlib import Path
 import random
-from typing import Optional
+import json
 
 import torch
 import torchvision
@@ -15,10 +16,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchvision.transforms import transforms
 
 from model import load_model, set_mask_on
-import json
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", default=64))
 RESNET_EPOCHS = int(os.getenv("NOF_EPOCHS", default=30))
+DATASET_DIR = os.getenv("DATASET_DIR", default="./data")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_OUT_DIR = Path("artifacts")
 MODEL_OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -26,6 +27,7 @@ MODEL_OUT_DIR.mkdir(parents=True, exist_ok=True)
 # POPULATION_SIZE = 50
 POPULATION_SIZE = 15
 INDIVIDUAL_EPOCHS = 5
+CXPB = 0.2
 
 logging.basicConfig(
     level=logging.INFO, format="[%(asctime)s  %(name)s] %(levelname)s: %(message)s"
@@ -35,8 +37,10 @@ torch.manual_seed(42)
 random.seed(42)
 
 
-def evaluate(model):
+def evaluate(model, mask=None):
     model.eval()
+    if mask:  # Just in case, this should be fixed in train_episode TODO
+        set_mask_on(model, mask)
     with torch.no_grad():
         total = 0
         correct = 0
@@ -69,10 +73,10 @@ def get_dataset_loaders():
         [transforms.ToTensor(), transforms.Normalize(mean, std)]
     )
     train_dataset = torchvision.datasets.CIFAR10(
-        root="./data", train=True, download=True, transform=transform_train
+        root=DATASET_DIR, train=True, download=True, transform=transform_train
     )
     test_dataset = torchvision.datasets.CIFAR10(
-        root="./data", train=False, download=True, transform=transform_test
+        root=DATASET_DIR, train=False, download=True, transform=transform_test
     )
 
     # more workers?
@@ -102,7 +106,7 @@ def parse_args():
     evolve_parser.add_argument("--gens", type=int, default=20)
     evolve_parser.add_argument("--mutation-prob", type=float, default=0.2)
     evolve_parser.add_argument(
-        "--model", type=Optional[str], default=None, help="Base model path"
+        "--model", type=str, default=None, help="Base model path"
     )
 
     return parser.parse_args()
@@ -131,10 +135,10 @@ def generate_seed_population(chromosome_len, population_size):
 
 
 def evaluate_evolution(base_model, individual):
-    set_mask_on(base_model, individual)
-    correct, total = tune(model, INDIVIDUAL_EPOCHS)
+    model = copy.deepcopy(base_model)
+    set_mask_on(model, individual)
+    correct, total = tune(model, INDIVIDUAL_EPOCHS, mask=individual)
     return sum(individual), float(correct) / total
-
 
 def run_evolution(tb, ngens, mutation_prob):
     pop = tb.population(POPULATION_SIZE)
@@ -145,6 +149,13 @@ def run_evolution(tb, ngens, mutation_prob):
     for gen in range(ngens):
         offspring = toolbox.select(pop, len(pop))
         offspring = list(map(toolbox.clone, offspring))
+
+        # Apply crossover and mutation
+        for child1, child2 in zip(offspring[::2], offspring[1::2]):
+            if random.random() < CXPB:
+                toolbox.mate(child1, child2)
+                del child1.fitness.values
+                del child2.fitness.values
 
         for mutant in offspring:
             if random.random() < mutation_prob:
@@ -165,7 +176,7 @@ def run_evolution(tb, ngens, mutation_prob):
     return tools.sortNondominated(pop, k=len(pop), first_front_only=True)[0]
 
 
-def train_episode(optimizer, scheduler, criterion):
+def train_episode(model, optimizer, scheduler, criterion, mask=None):
     model.train()
     train_loss = 0
     correct = 0
@@ -179,6 +190,8 @@ def train_episode(optimizer, scheduler, criterion):
         loss = criterion(outputs, targets)
         loss.backward()
         optimizer.step()
+        if mask:
+            set_mask_on(model, mask)
 
         train_loss += loss.item()
         _, predicted = outputs.max(1)
@@ -211,7 +224,7 @@ def train(model, epochs, save=True, optimizer_path=None, scheduler_path=None):
     criterion = CrossEntropyLoss()
     for i in range(epochs):
         logger.info(f"Epoch {i + 1}/{epochs}")
-        avg_loss, acc = train_episode(optimizer, scheduler, criterion)
+        avg_loss, acc = train_episode(model, optimizer, scheduler, criterion)
         logger.info("Train loss: {:.4f}, acc: {:.4f}".format(avg_loss, acc))
         correct, total = evaluate(model)
         logger.info(f"Test dataset precision: {correct / total}")
@@ -221,7 +234,7 @@ def train(model, epochs, save=True, optimizer_path=None, scheduler_path=None):
             torch.save(scheduler.state_dict(), MODEL_OUT_DIR / f"scheduler.{i:02d}.pth")
 
 
-def tune(model, epochs):
+def tune(model, epochs, early_stopping=False, mask=None):
     optimizer = SGD(
         model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0005, nesterov=True
     )
@@ -233,14 +246,14 @@ def tune(model, epochs):
     best_correct = None
     total = None
     for i in range(epochs):
-        avg_loss, acc = train_episode(optimizer, scheduler, criterion)
-        logger.info("Train loss: {:.4f}, acc: {:.4f}".format(avg_loss, acc))
-        correct, total = evaluate(model)
-        if best_correct and correct < best_correct:
+        avg_loss, acc = train_episode(model, optimizer, scheduler, criterion, mask=mask)
+        logger.info("Train accuracy: {:.4f}, loss: {:.4f}".format(avg_loss, acc))
+        correct, total = evaluate(model, mask=mask)
+        logger.info(f"Test accuracy: {correct / total}")
+        if early_stopping and best_correct and correct < best_correct:
             logger.info(f"Early stopping at epoch {i}")
             return best_correct, total
         best_correct = correct
-        logger.info(f"Test dataset precision: {correct / total}")
     logger.info(f"Trained for full {epochs} epochs")
     return best_correct, total
 
@@ -290,9 +303,12 @@ if __name__ == "__main__":
             toolbox.attr_bool,
             chromosome_len,
         )
-        toolbox.register("population", generate_seed_population, chromosome_len)
+        #
         toolbox.register("evaluate", evaluate_evolution, model)
+        toolbox.register("mate", tools.cxTwoPoint)
         toolbox.register("mutate", tools.mutFlipBit, indpb=2 / chromosome_len)
+        toolbox.register("population", generate_seed_population, chromosome_len)
+        toolbox.register("select", tools.selNSGA2)
 
         first_front = run_evolution(toolbox, args.gens, args.mutation_prob)
         logger.info(first_front)
