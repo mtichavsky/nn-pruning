@@ -15,6 +15,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchvision.transforms import transforms
 
 from model import load_model, set_mask_on
+import json
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", default=64))
 RESNET_EPOCHS = int(os.getenv("NOF_EPOCHS", default=30))
@@ -89,9 +90,7 @@ def parse_args():
     subparsers = parser.add_subparsers(dest="command")
     train_parser = subparsers.add_parser("train")
     train_parser.add_argument("--epochs", type=int, default=int(RESNET_EPOCHS))
-    train_parser.add_argument(
-        "--model", type=str, default=None, help="Base model path"
-    )
+    train_parser.add_argument("--model", type=str, default=None, help="Base model path")
     train_parser.add_argument(
         "--optimizer", type=str, default=None, help="Optimizer path"
     )
@@ -133,8 +132,7 @@ def generate_seed_population(chromosome_len, population_size):
 
 def evaluate_evolution(base_model, individual):
     set_mask_on(base_model, individual)
-    train(model, INDIVIDUAL_EPOCHS, False)
-    correct, total = evaluate(base_model)
+    correct, total = tune(model, INDIVIDUAL_EPOCHS)
     return sum(individual), float(correct) / total
 
 
@@ -202,13 +200,17 @@ def train(model, epochs, save=True, optimizer_path=None, scheduler_path=None):
     )
     if optimizer_path:
         logger.info(f"Loading optimizer from {optimizer_path}")
-        optimizer.load_state_dict(torch.load(optimizer_path, map_location=torch.device(device)))
+        optimizer.load_state_dict(
+            torch.load(optimizer_path, map_location=torch.device(device))
+        )
     if scheduler_path:
         logger.info(f"Loading scheduler from {scheduler_path}")
-        scheduler.load_state_dict(torch.load(scheduler_path, map_location=torch.device(device)))
+        scheduler.load_state_dict(
+            torch.load(scheduler_path, map_location=torch.device(device))
+        )
     criterion = CrossEntropyLoss()
     for i in range(epochs):
-        logger.info(f"Epoch {i + 1}/{RESNET_EPOCHS}")
+        logger.info(f"Epoch {i + 1}/{epochs}")
         avg_loss, acc = train_episode(optimizer, scheduler, criterion)
         logger.info("Train loss: {:.4f}, acc: {:.4f}".format(avg_loss, acc))
         correct, total = evaluate(model)
@@ -219,6 +221,49 @@ def train(model, epochs, save=True, optimizer_path=None, scheduler_path=None):
             torch.save(scheduler.state_dict(), MODEL_OUT_DIR / f"scheduler.{i:02d}.pth")
 
 
+def tune(model, epochs):
+    optimizer = SGD(
+        model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0005, nesterov=True
+    )
+    scheduler = ReduceLROnPlateau(
+        optimizer, factor=0.1, patience=3, threshold=0.001, mode="max"
+    )
+    criterion = CrossEntropyLoss()
+
+    best_correct = None
+    total = None
+    for i in range(epochs):
+        avg_loss, acc = train_episode(optimizer, scheduler, criterion)
+        logger.info("Train loss: {:.4f}, acc: {:.4f}".format(avg_loss, acc))
+        correct, total = evaluate(model)
+        if best_correct and correct < best_correct:
+            logger.info(f"Early stopping at epoch {i}")
+            return best_correct, total
+        best_correct = correct
+        logger.info(f"Test dataset precision: {correct / total}")
+    logger.info(f"Trained for full {epochs} epochs")
+    return best_correct, total
+
+
+def save_pareto_solutions(front, generation=None):
+    solutions = []
+    for idx, individual in enumerate(front):
+        solution = {
+            "mask": individual,
+            "fitness": individual.fitness.values,
+            "size": individual.fitness.values[0],
+            "accuracy": individual.fitness.values[1],
+        }
+        solutions.append(solution)
+
+    filename = (
+        MODEL_OUT_DIR
+        / f'pareto_solutions_gen_{generation if generation else "final"}.json'
+    )
+    with open(filename, "w") as f:
+        json.dump(solutions, f)
+
+
 if __name__ == "__main__":
     logger.info("starting execution")
     args = parse_args()
@@ -226,7 +271,12 @@ if __name__ == "__main__":
     train_loader, test_loader = get_dataset_loaders()
 
     if args.command == "train":
-        train(model, RESNET_EPOCHS, scheduler_path=args.scheduler, optimizer_path=args.optimizer)
+        train(
+            model,
+            RESNET_EPOCHS,
+            scheduler_path=args.scheduler,
+            optimizer_path=args.optimizer,
+        )
     elif args.command == "evolve":
         creator.create("FitnessMulti", base.Fitness, weights=(-1.0, 1.0))
         creator.create("Individual", list, fitness=creator.FitnessMulti)
@@ -244,5 +294,6 @@ if __name__ == "__main__":
         toolbox.register("evaluate", evaluate_evolution, model)
         toolbox.register("mutate", tools.mutFlipBit, indpb=2 / chromosome_len)
 
-        out = run_evolution(toolbox, args.gens, args.mutation_prob)
-        logger.info(out)
+        first_front = run_evolution(toolbox, args.gens, args.mutation_prob)
+        logger.info(first_front)
+        save_pareto_solutions(first_front)

@@ -10,7 +10,7 @@
 # Link to the source: https://github.com/roman-janik/diploma_thesis_program/blob/main/ner/train_ner_model.sh
 # Author: Roman Janík (https://github.com/roman-janik)
 
-#PBS -N train_resnet
+#PBS -N run_evolution
 #PBS -q gpu
 #PBS -l select=1:ncpus=1:ngpus=1:gpu_mem=20gb:mem=20gb:scratch_local=30gb
 #PBS -j oe
@@ -59,10 +59,10 @@ source ./venv/bin/activate
 pip install --upgrade pip
 TMPDIR="../tmp" pip install torch==2.6.0 --extra-index-url https://download.pytorch.org/whl/cu113 -r requirements.txt
 
-echo "Starting the training..."
-venv/bin/python main.py evolve --gens "$GENS" --mutation-prob "$MUTATION_PROB"
+echo "Starting the evolution..."
+venv/bin/python main.py evolve --gens "$GENS" --mutation-prob "$MUTATION_PROB" --model "$MODEL_PATH"
 
-output_dir="$RES_DIR/train-$(date +%Y-%m-%d-%H-%M)"
+output_dir="$RES_DIR/evolution-$(date +%Y-%m-%d-%H-%M)"
 echo "Saving the results into the storage directory $output_dir"
 mkdir -p "$output_dir/artifacts"
 mv artifacts/* "$output_dir/artifacts"

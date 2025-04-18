@@ -12,7 +12,7 @@ class MaskedConv2d(nn.Conv2d):
 
     def __init__(self, *args, **kwargs):
         super(MaskedConv2d, self).__init__(*args, **kwargs)
-        self.register_buffer('_mask', torch.ones_like(self.weight))
+        self.register_buffer("_mask", torch.ones_like(self.weight))
         self._mask = self._mask.to(self.weight.device)
 
     def forward(self, input):
@@ -37,7 +37,9 @@ class MaskedConv2d(nn.Conv2d):
         assert (
             m.shape[0] == self.out_channels
         ), "Mask length must match the number of filters"
-        self._mask = m.view(-1, 1, 1, 1).float().expand_as(self.weight).to(self.weight.device)
+        self._mask = (
+            m.view(-1, 1, 1, 1).float().expand_as(self.weight).to(self.weight.device)
+        )
 
 
 # TODO cleanup

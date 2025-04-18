@@ -9,17 +9,13 @@
 GIT_BRANCH="${1:-master}"
 WALLTIME="$2"
 BATCH_SIZE="$3"
-DATASET_DIR="$4"
+MODEL_PATH="$4"
 GENS="$5"
-MUTATION_PROB="$5"
+MUTATION_PROB="$6"
 
-ARG_STRING=GIT_BRANCH="$GIT_BRANCH",BATCH_SIZE="$BATCH_SIZE",DATASET_DIR="$DATASET_DIR"
+ARG_STRING=GIT_BRANCH="$GIT_BRANCH",BATCH_SIZE="$BATCH_SIZE",MODEL_PATH="$MODEL_PATH"
 ARG_STRING+=,DOWNLOAD_DATASET=True,GENS="$GENS",MUTATION_PROB="$MUTATION_PROB"
-
-#if [ -n "$MODEL_IN_DIR" ]; then
-#  ARG_STRING+=,MODEL_IN_DIR="$MODEL_IN_DIR"
-#fi
 
 # -v list of environment variables to be given to the job
 qsub -v "$ARG_STRING" \
-  -l walltime="$WALLTIME" ./"$(dirname "$0")"/train_model_job
+  -l walltime="$WALLTIME" ./"$(dirname "$0")"/evolve_job
