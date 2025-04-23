@@ -17,17 +17,18 @@ from torchvision.transforms import transforms
 
 from model import load_model, set_mask_on
 
+# Hyperparameters to tune
+# toolbox.register("mutate", tools.mutFlipBit, indpb=2 / chromosome_len)
+POPULATION_SIZE = 10
+INDIVIDUAL_EPOCHS = 15
+CXPB = 0.2
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", default=64))
+
 RESNET_EPOCHS = int(os.getenv("NOF_EPOCHS", default=30))
 DATASET_DIR = os.getenv("DATASET_DIR", default="./data")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_OUT_DIR = Path("artifacts")
 MODEL_OUT_DIR.mkdir(parents=True, exist_ok=True)
-# TODO
-# POPULATION_SIZE = 50
-POPULATION_SIZE = 15
-INDIVIDUAL_EPOCHS = 5
-CXPB = 0.2
 
 logging.basicConfig(
     level=logging.INFO, format="[%(asctime)s  %(name)s] %(levelname)s: %(message)s"
@@ -137,7 +138,7 @@ def generate_seed_population(chromosome_len, population_size):
 def evaluate_evolution(base_model, individual):
     model = copy.deepcopy(base_model)
     set_mask_on(model, individual)
-    correct, total = tune(model, INDIVIDUAL_EPOCHS, mask=individual)
+    correct, total = tune(model, INDIVIDUAL_EPOCHS, early_stopping=True, mask=individual)
     return sum(individual), float(correct) / total
 
 def run_evolution(tb, ngens, mutation_prob):
@@ -145,6 +146,9 @@ def run_evolution(tb, ngens, mutation_prob):
     fitness = map(tb.evaluate, pop)
     for ind, fit in zip(pop, fitness):
         ind.fitness.values = fit
+
+    all_solutions = pop[:]
+    best_front = tools.sortNondominated(pop, k=len(pop), first_front_only=True)[0]
 
     for gen in range(ngens):
         offspring = toolbox.select(pop, len(pop))
@@ -167,13 +171,17 @@ def run_evolution(tb, ngens, mutation_prob):
         for ind, fit in zip(invalid_ind, fitnesses):
             ind.fitness.values = fit
 
+        all_solutions.extend(offspring)
+        best_front = tools.sortNondominated(best_front + offspring, k=2*POPULATION_SIZE, first_front_only=True)[0]
         pop[:] = toolbox.select(pop + offspring, POPULATION_SIZE)
 
         logger.info(f"Generation {gen}:")
         fits = [ind.fitness.values for ind in pop]
+        logger.info("Preview individuals from generation (sizes, accuracy):")
         for f in fits[:5]:  # preview
             logger.info(f)
-    return tools.sortNondominated(pop, k=len(pop), first_front_only=True)[0]
+        save_pareto_solutions(best_front, f"{gen}")
+        save_pareto_solutions(all_solutions, f"{gen}_all")
 
 
 def train_episode(model, optimizer, scheduler, criterion, mask=None):
@@ -225,7 +233,7 @@ def train(model, epochs, save=True, optimizer_path=None, scheduler_path=None):
     for i in range(epochs):
         logger.info(f"Epoch {i + 1}/{epochs}")
         avg_loss, acc = train_episode(model, optimizer, scheduler, criterion)
-        logger.info("Train loss: {:.4f}, acc: {:.4f}".format(avg_loss, acc))
+        logger.info("Train loss: {:.4f}, acc: {:.4f}".format(acc, avg_loss))
         correct, total = evaluate(model)
         logger.info(f"Test dataset precision: {correct / total}")
         if save and i % 5 == 0:
@@ -310,6 +318,4 @@ if __name__ == "__main__":
         toolbox.register("population", generate_seed_population, chromosome_len)
         toolbox.register("select", tools.selNSGA2)
 
-        first_front = run_evolution(toolbox, args.gens, args.mutation_prob)
-        logger.info(first_front)
-        save_pareto_solutions(first_front)
+        run_evolution(toolbox, args.gens, args.mutation_prob)
