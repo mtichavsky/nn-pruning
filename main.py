@@ -19,8 +19,8 @@ from model import load_model, set_mask_on
 
 # Hyperparameters to tune
 # toolbox.register("mutate", tools.mutFlipBit, indpb=2 / chromosome_len)
-POPULATION_SIZE = 10
-INDIVIDUAL_EPOCHS = 15
+POPULATION_SIZE = 8
+INDIVIDUAL_EPOCHS = 20
 CXPB = 0.2
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", default=64))
 
@@ -36,23 +36,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 torch.manual_seed(42)
 random.seed(42)
-
-
-def evaluate(model, mask=None):
-    model.eval()
-    if mask:  # Just in case, this should be fixed in train_episode TODO
-        set_mask_on(model, mask)
-    with torch.no_grad():
-        total = 0
-        correct = 0
-        for batch_idx, (inputs, targets) in enumerate(test_loader):
-            inputs, targets = inputs.to(device), targets.to(device)
-            outputs = model(inputs)
-            _, predictions = outputs.max(1)
-
-            total += len(inputs)
-            correct += predictions.eq(targets).sum().item()
-        return correct, total
 
 
 def get_dataset_loaders():
@@ -134,12 +117,32 @@ def generate_seed_population(chromosome_len, population_size):
 
     return population
 
+def evaluate(model, mask=None):
+    model.eval()
+    if mask:  # Just in case, this should be fixed in train_episode TODO
+        set_mask_on(model, mask)
+    with torch.no_grad():
+        total = 0
+        correct = 0
+        for batch_idx, (inputs, targets) in enumerate(test_loader):
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = model(inputs)
+            _, predictions = outputs.max(1)
+
+            total += len(inputs)
+            correct += predictions.eq(targets).sum().item()
+        return correct, total
+
 
 def evaluate_evolution(base_model, individual):
     model = copy.deepcopy(base_model)
     set_mask_on(model, individual)
     correct, total = tune(model, INDIVIDUAL_EPOCHS, early_stopping=True, mask=individual)
-    return sum(individual), float(correct) / total
+    logger.info(f"[Evaluated] {sum(individual)}: {correct / total}")
+    accuracy = float(correct) / total
+    if accuracy < 0.75: # penalize anything less than 0.75, might increase
+        accuracy = 0.1 * accuracy
+    return sum(individual), accuracy
 
 def run_evolution(tb, ngens, mutation_prob):
     pop = tb.population(POPULATION_SIZE)
@@ -147,7 +150,7 @@ def run_evolution(tb, ngens, mutation_prob):
     for ind, fit in zip(pop, fitness):
         ind.fitness.values = fit
 
-    all_solutions = pop[:]
+    all_solutions = [copy.deepcopy(ind) for ind in pop]
     best_front = tools.sortNondominated(pop, k=len(pop), first_front_only=True)[0]
 
     for gen in range(ngens):
@@ -171,7 +174,7 @@ def run_evolution(tb, ngens, mutation_prob):
         for ind, fit in zip(invalid_ind, fitnesses):
             ind.fitness.values = fit
 
-        all_solutions.extend(offspring)
+        all_solutions.extend(copy.deepcopy(ind) for ind in offspring)
         best_front = tools.sortNondominated(best_front + offspring, k=2*POPULATION_SIZE, first_front_only=True)[0]
         pop[:] = toolbox.select(pop + offspring, POPULATION_SIZE)
 
@@ -255,7 +258,7 @@ def tune(model, epochs, early_stopping=False, mask=None):
     total = None
     for i in range(epochs):
         avg_loss, acc = train_episode(model, optimizer, scheduler, criterion, mask=mask)
-        logger.info("Train accuracy: {:.4f}, loss: {:.4f}".format(avg_loss, acc))
+        logger.info("Train accuracy: {:.4f}, loss: {:.4f}".format(acc, avg_loss))
         correct, total = evaluate(model, mask=mask)
         logger.info(f"Test accuracy: {correct / total}")
         if early_stopping and best_correct and correct < best_correct:
@@ -314,7 +317,7 @@ if __name__ == "__main__":
         #
         toolbox.register("evaluate", evaluate_evolution, model)
         toolbox.register("mate", tools.cxTwoPoint)
-        toolbox.register("mutate", tools.mutFlipBit, indpb=2 / chromosome_len)
+        toolbox.register("mutate", tools.mutFlipBit, indpb=25 / chromosome_len)
         toolbox.register("population", generate_seed_population, chromosome_len)
         toolbox.register("select", tools.selNSGA2)
 
