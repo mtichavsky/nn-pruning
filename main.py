@@ -19,10 +19,11 @@ from model import load_model, set_mask_on
 
 # Hyperparameters to tune
 # toolbox.register("mutate", tools.mutFlipBit, indpb=2 / chromosome_len)
-POPULATION_SIZE = 8
-INDIVIDUAL_EPOCHS = 20
+POPULATION_SIZE = 6
+INDIVIDUAL_EPOCHS = 12
 CXPB = 0.2
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", default=64))
+PATIENCE = int(os.getenv("PATIENCE", default=3))
 
 RESNET_EPOCHS = int(os.getenv("NOF_EPOCHS", default=30))
 DATASET_DIR = os.getenv("DATASET_DIR", default="./data")
@@ -140,7 +141,7 @@ def evaluate_evolution(base_model, individual):
     correct, total = tune(model, INDIVIDUAL_EPOCHS, early_stopping=True, mask=individual)
     logger.info(f"[Evaluated] {sum(individual)}: {correct / total}")
     accuracy = float(correct) / total
-    if accuracy < 0.75: # penalize anything less than 0.75, might increase
+    if accuracy < 0.78: # penalize anything less than 0.78, might increase
         accuracy = 0.1 * accuracy
     return sum(individual), accuracy
 
@@ -256,15 +257,21 @@ def tune(model, epochs, early_stopping=False, mask=None):
 
     best_correct = None
     total = None
+    patience_counter = 0
     for i in range(epochs):
         avg_loss, acc = train_episode(model, optimizer, scheduler, criterion, mask=mask)
         logger.info("Train accuracy: {:.4f}, loss: {:.4f}".format(acc, avg_loss))
         correct, total = evaluate(model, mask=mask)
         logger.info(f"Test accuracy: {correct / total}")
         if early_stopping and best_correct and correct < best_correct:
-            logger.info(f"Early stopping at epoch {i}")
-            return best_correct, total
-        best_correct = correct
+            patience_counter += 1
+            logger.info(f"Patience_counter++: {patience_counter}")
+            if patience_counter >= PATIENCE:
+                logger.info(f"Early stopping at epoch {i}")
+                return best_correct, total
+        else:
+            patience_counter = 0
+            best_correct = correct
     logger.info(f"Trained for full {epochs} epochs")
     return best_correct, total
 
