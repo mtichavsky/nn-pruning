@@ -63,7 +63,7 @@ pip install --upgrade pip
 TMPDIR="../tmp" pip install torch==2.6.0 --extra-index-url https://download.pytorch.org/whl/cu113 -r requirements.txt
 
 echo "Starting the evolution..."
-venv/bin/python main.py evolve --gens "$GENS" --mutation-prob "$MUTATION_PROB" --model "$MODEL_PATH"
+venv/bin/python main.py evolve --gens "$GENS" --mutation-prob "$MUTATION_PROB" --model "$MODEL_PATH" --optimizer "$OPTIMIZER_PATH" --scheduler "$SCHEDULER_PATH"
 
 output_dir="$RES_DIR/evolution-$(date +%Y-%m-%d-%H-%M)"
 echo "Saving the results into the storage directory $output_dir"

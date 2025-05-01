@@ -31,6 +31,7 @@ def walltime_to_seconds(walltime_str):
     hours, minutes, seconds = map(int, walltime_str.split(":"))
     return hours * 3600 + minutes * 60 + seconds
 WALLTIME = walltime_to_seconds(os.getenv("WALLTIME", default=None))
+SAVE_MODEL_INTERVAL = int(os.getenv("SAVE_MODEL_INTERVAL", default=5))
 
 
 RESNET_EPOCHS = int(os.getenv("NOF_EPOCHS", default=30))
@@ -101,6 +102,16 @@ def parse_args():
     evolve_parser.add_argument(
         "--model", type=str, default=None, help="Base model path"
     )
+    evolve_parser.add_argument(
+        "--optimizer", type=str, default=None, help="Optimizer path"
+    )
+    evolve_parser.add_argument(
+        "--scheduler", type=str, default=None, help="Scheduler path"
+    )
+    eval_parser = subparsers.add_parser("eval")
+    eval_parser.add_argument(
+        "--model", type=str, default=None, help="Base model path"
+    )
 
     return parser.parse_args()
 
@@ -143,13 +154,13 @@ def evaluate(model, mask=None):
         return correct, total
 
 
-def evaluate_evolution(base_model, individual):
+def evaluate_evolution(base_model, individual, optimizer_path, scheduler_path):
     model = copy.deepcopy(base_model)
     set_mask_on(model, individual)
-    correct, total = tune(model, INDIVIDUAL_EPOCHS, early_stopping=True, mask=individual)
+    correct, total = tune(model, INDIVIDUAL_EPOCHS, optimizer_path, scheduler_path, early_stopping=True, mask=individual)
     logger.info(f"[Evaluated] {sum(individual)}: {correct / total}")
     accuracy = float(correct) / total
-    if accuracy < 0.78: # penalize anything less than 0.78, might increase
+    if accuracy < 0.8: # penalize anything less than 0.8, might increase
         accuracy = 0.1 * accuracy
     return sum(individual), accuracy
 
@@ -251,19 +262,29 @@ def train(model, epochs, save=True, optimizer_path=None, scheduler_path=None):
         logger.info("Train loss: {:.4f}, acc: {:.4f}".format(acc, avg_loss))
         correct, total = evaluate(model)
         logger.info(f"Test dataset precision: {correct / total}")
-        if save and i % 5 == 0:
+        if save and i % SAVE_MODEL_INTERVAL == 0:
             torch.save(model.state_dict(), MODEL_OUT_DIR / f"model.{i:02d}.pth")
             torch.save(optimizer.state_dict(), MODEL_OUT_DIR / f"optimizer.{i:02d}.pth")
             torch.save(scheduler.state_dict(), MODEL_OUT_DIR / f"scheduler.{i:02d}.pth")
 
 
-def tune(model, epochs, early_stopping=False, mask=None):
+def tune(model, epochs, optimizer_path, scheduler_path, early_stopping=False, mask=None):
     optimizer = SGD(
         model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0005, nesterov=True
     )
     scheduler = ReduceLROnPlateau(
         optimizer, factor=0.1, patience=3, threshold=0.001, mode="max"
     )
+    if optimizer_path:
+        logger.info(f"Loading optimizer from {optimizer_path}")
+        optimizer.load_state_dict(
+            torch.load(optimizer_path, map_location=torch.device(device))
+        )
+    if scheduler_path:
+        logger.info(f"Loading scheduler from {scheduler_path}")
+        scheduler.load_state_dict(
+            torch.load(scheduler_path, map_location=torch.device(device))
+        )
     criterion = CrossEntropyLoss()
 
     best_correct = None
@@ -316,10 +337,18 @@ if __name__ == "__main__":
     if args.command == "train":
         train(
             model,
-            RESNET_EPOCHS,
+            args.epochs,
             scheduler_path=args.scheduler,
             optimizer_path=args.optimizer,
         )
+    elif args.command == "eval":
+        logger.info("Starting evaluation")
+        mask = [1] * chromosome_len
+        # mask = [1] * (int(chromosome_len / 2) - 1000) + [0] * 1000 + int(chromosome_len / 2) * [1]
+        masked_model = copy.deepcopy(model)
+        set_mask_on(masked_model, mask)
+        masked_correct, masked_total = evaluate(model, mask=mask)
+        logger.info(f"[Evaluated] {args.model}: {masked_correct / masked_total}")
     elif args.command == "evolve":
         creator.create("FitnessMulti", base.Fitness, weights=(-1.0, 1.0))
         creator.create("Individual", list, fitness=creator.FitnessMulti)
@@ -334,7 +363,7 @@ if __name__ == "__main__":
             chromosome_len,
         )
         #
-        toolbox.register("evaluate", evaluate_evolution, model)
+        toolbox.register("evaluate", evaluate_evolution, model, args.optimizer, args.scheduler)
         toolbox.register("mate", tools.cxTwoPoint)
         toolbox.register("mutate", tools.mutFlipBit, indpb=25 / chromosome_len)
         toolbox.register("population", generate_seed_population, chromosome_len)
