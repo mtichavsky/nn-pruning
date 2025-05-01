@@ -2,6 +2,7 @@ import argparse
 import copy
 import logging
 import os
+import time
 from pathlib import Path
 import random
 import json
@@ -24,6 +25,13 @@ INDIVIDUAL_EPOCHS = 12
 CXPB = 0.2
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", default=64))
 PATIENCE = int(os.getenv("PATIENCE", default=3))
+def walltime_to_seconds(walltime_str):
+    if walltime_str is None:
+        return None
+    hours, minutes, seconds = map(int, walltime_str.split(":"))
+    return hours * 3600 + minutes * 60 + seconds
+WALLTIME = walltime_to_seconds(os.getenv("WALLTIME", default=None))
+
 
 RESNET_EPOCHS = int(os.getenv("NOF_EPOCHS", default=30))
 DATASET_DIR = os.getenv("DATASET_DIR", default="./data")
@@ -145,7 +153,7 @@ def evaluate_evolution(base_model, individual):
         accuracy = 0.1 * accuracy
     return sum(individual), accuracy
 
-def run_evolution(tb, ngens, mutation_prob):
+def run_evolution(tb, ngens, mutation_prob, start_time):
     pop = tb.population(POPULATION_SIZE)
     fitness = map(tb.evaluate, pop)
     for ind, fit in zip(pop, fitness):
@@ -155,6 +163,9 @@ def run_evolution(tb, ngens, mutation_prob):
     best_front = tools.sortNondominated(pop, k=len(pop), first_front_only=True)[0]
 
     for gen in range(ngens):
+        if time.time() - start_time > WALLTIME - 50 * 60:
+            logger.info(f"Reached walltime -50minutes, stopping evolution")
+            break
         offspring = toolbox.select(pop, len(pop))
         offspring = list(map(toolbox.clone, offspring))
 
@@ -297,6 +308,7 @@ def save_pareto_solutions(front, generation=None):
 
 if __name__ == "__main__":
     logger.info("starting execution")
+    start_time = time.time()
     args = parse_args()
     model, chromosome_len = load_model(device, args.model, logger)
     train_loader, test_loader = get_dataset_loaders()
@@ -328,4 +340,4 @@ if __name__ == "__main__":
         toolbox.register("population", generate_seed_population, chromosome_len)
         toolbox.register("select", tools.selNSGA2)
 
-        run_evolution(toolbox, args.gens, args.mutation_prob)
+        run_evolution(toolbox, args.gens, args.mutation_prob, start_time=start_time)
