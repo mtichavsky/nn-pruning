@@ -154,7 +154,7 @@ def evaluate(model, mask=None):
         return correct, total
 
 
-def evaluate_evolution(base_model, individual, optimizer_path, scheduler_path):
+def evaluate_evolution(base_model, optimizer_path, scheduler_path, individual):
     model = copy.deepcopy(base_model)
     set_mask_on(model, individual)
     correct, total = tune(model, INDIVIDUAL_EPOCHS, optimizer_path, scheduler_path, early_stopping=True, mask=individual)
