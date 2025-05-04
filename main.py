@@ -19,8 +19,7 @@ from torchvision.transforms import transforms
 from model import load_model, set_mask_on
 
 # Hyperparameters to tune
-# toolbox.register("mutate", tools.mutFlipBit, indpb=2 / chromosome_len)
-POPULATION_SIZE = 6
+POPULATION_SIZE = 8
 INDIVIDUAL_EPOCHS = 12
 CXPB = 0.2
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", default=64))
@@ -32,7 +31,9 @@ def walltime_to_seconds(walltime_str):
     return hours * 3600 + minutes * 60 + seconds
 WALLTIME = walltime_to_seconds(os.getenv("WALLTIME", default=None))
 SAVE_MODEL_INTERVAL = int(os.getenv("SAVE_MODEL_INTERVAL", default=5))
-
+# toolbox.register("mutate", tools.mutFlipBit, indpb=2 / chromosome_len)
+FLIP_BITS_WHEN_MUTATE = 25
+POP_INDIVIDUALS_SLIGHTLY_MUTATED = 3
 
 RESNET_EPOCHS = int(os.getenv("NOF_EPOCHS", default=30))
 DATASET_DIR = os.getenv("DATASET_DIR", default="./data")
@@ -122,10 +123,10 @@ def generate_seed_population(chromosome_len, population_size):
     full_model = creator.Individual([1] * chromosome_len)
     population.append(full_model)
 
-    for _ in range(5):
+    for _ in range(POP_INDIVIDUALS_SLIGHTLY_MUTATED):
         individual = creator.Individual([1] * chromosome_len)
         prune_idx = random.sample(
-            range(chromosome_len), k=random.randint(1, chromosome_len // 10)
+            range(chromosome_len), k=random.randint(1, chromosome_len // 4)
         )
         for idx in prune_idx:
             individual[idx] = 0
@@ -350,7 +351,8 @@ if __name__ == "__main__":
         masked_correct, masked_total = evaluate(model, mask=mask)
         logger.info(f"[Evaluated] {args.model}: {masked_correct / masked_total}")
     elif args.command == "evolve":
-        creator.create("FitnessMulti", base.Fitness, weights=(-1.0, 1.0))
+        # Normalizing it to the same range, though it should not have any significant effect
+        creator.create("FitnessMulti", base.Fitness, weights=(-1.0, 4800.0))
         creator.create("Individual", list, fitness=creator.FitnessMulti)
 
         toolbox = base.Toolbox()
@@ -365,7 +367,7 @@ if __name__ == "__main__":
         #
         toolbox.register("evaluate", evaluate_evolution, model, args.optimizer, args.scheduler)
         toolbox.register("mate", tools.cxTwoPoint)
-        toolbox.register("mutate", tools.mutFlipBit, indpb=25 / chromosome_len)
+        toolbox.register("mutate", tools.mutFlipBit, indpb=FLIP_BITS_WHEN_MUTATE / chromosome_len)
         toolbox.register("population", generate_seed_population, chromosome_len)
         toolbox.register("select", tools.selNSGA2)
 

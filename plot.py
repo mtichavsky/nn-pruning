@@ -21,7 +21,7 @@ def plot_pareto_front(json_path):
     plt.ylabel("Accuracy")
     plt.title("Pareto Front")
     plt.xlim(4800, 0)
-    plt.ylim(0.0, 1.0)
+    # plt.ylim(0.5, 1.0)
     plt.grid(True)
     plt.legend()
     plt.tight_layout()

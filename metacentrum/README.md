@@ -56,4 +56,8 @@ qstat -f $JOB_ID | grep exec_host2
 # ssh into the host
 cd /var/spool/pbs/spool/
 # you'll see output of your job
+tail -n 40 -f  <filename>
+# There's also /scratch.shared
+ls /scratch.ssd/tichavskym/job_10714710.pbs-m1/repo
+(BOOKWORM)tichavskym@zenith:~/transfer$ scp -r galdor1.metacentrum.cz:/scratch.ssd/tichavskym/job_10714710.pbs-m1/repo/artifacts .
 ```
