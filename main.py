@@ -117,9 +117,18 @@ def parse_args():
     eval_parser.add_argument(
         "--model", type=str, default=None, help="Base model path"
     )
-
+    random_parser = subparsers.add_parser("random", help="Perform random search")
+    random_parser.add_argument("--individuals", type=int, default=20)
+    random_parser.add_argument(
+        "--model", type=str, default=None, help="Base model path"
+    )
+    random_parser.add_argument(
+        "--optimizer", type=str, default=None, help="Optimizer path"
+    )
+    random_parser.add_argument(
+        "--scheduler", type=str, default=None, help="Scheduler path"
+    )
     return parser.parse_args()
-
 
 def generate_seed_population(chromosome_len, population_size):
     population = []
@@ -179,7 +188,7 @@ def run_evolution(tb, ngens, mutation_prob, start_time):
     best_front = tools.sortNondominated(pop, k=len(pop), first_front_only=True)[0]
 
     for gen in range(ngens):
-        if time.time() - start_time > WALLTIME - 50 * 60:
+        if WALLTIME and time.time() - start_time > WALLTIME - 50 * 60:
             logger.info(f"Reached walltime -50minutes, stopping evolution")
             break
         offspring = toolbox.select(pop, len(pop))
@@ -332,6 +341,51 @@ def save_pareto_solutions(front, generation=None):
         json.dump(solutions, f)
 
 
+def run_random_search(base_model, optimizer_path, scheduler_path, chromosome_len, individuals, start_time):
+    """
+    Perform random search with the same evaluation budget as evolution.
+    """
+    all_solutions = []
+    logger.info(f"Starting random search with {individuals} evaluations budget")
+    for i in range(individuals):
+        if WALLTIME and  time.time() - start_time > WALLTIME - 50 * 60:
+            logger.info(f"Reached walltime -50minutes, stopping random search")
+            break
+
+        # Generate a random individual
+        individual = [0] * chromosome_len
+        num_ones = random.randint(0, chromosome_len)
+        ones_positions = random.sample(range(chromosome_len), num_ones)
+        for pos in ones_positions:
+            individual[pos] = 1
+
+        model = copy.deepcopy(base_model)
+        set_mask_on(model, individual)
+        correct, total = tune(model, TUNING_EPOCHS , optimizer_path, scheduler_path,
+                              early_stopping=True, mask=individual)
+        accuracy = float(correct) / total
+
+        if accuracy < 0.8:  # Same penalty as in evolution
+            accuracy = 0.1 * accuracy
+
+        solution = {
+            "mask": individual,
+            "size": sum(individual),
+            "accuracy": accuracy
+        }
+        logger.info(f"[Evaluated solution] {solution["size"]}: {solution['accuracy']}")
+        all_solutions.append(solution)
+
+        # Save intermediate results
+        if i % (POPULATION_SIZE * 5) == 0:  # Save every few "generations" equivalent
+            with open(MODEL_OUT_DIR / f'random_search_solutions_{i}.json', 'w') as f:
+                json.dump(all_solutions, f)
+
+    # Save final results
+    with open(MODEL_OUT_DIR / 'random_search_solutions_final.json', 'w') as f:
+        json.dump(all_solutions, f)
+
+
 if __name__ == "__main__":
     logger.info("starting execution")
     start_time = time.time()
@@ -376,3 +430,7 @@ if __name__ == "__main__":
         toolbox.register("select", tools.selNSGA2)
 
         run_evolution(toolbox, args.gens, args.mutation_prob, start_time=start_time)
+    elif args.command == "random":
+        run_random_search(model, args.optimizer, args.scheduler, chromosome_len, args.individuals, start_time=start_time)
+    else:
+        raise ValueError(f"Unknown command {args.command}")
