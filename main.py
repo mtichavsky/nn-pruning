@@ -18,28 +18,32 @@ from torchvision.transforms import transforms
 
 from model import load_model, set_mask_on
 
-# Hyperparameters to tune
+# Evolution
 POPULATION_SIZE = 8
-INDIVIDUAL_EPOCHS = 12
+POP_INDIVIDUALS_SLIGHTLY_MUTATED = 3
 CXPB = 0.2
+# Mutate
+FLIP_BITS_WHEN_MUTATE = 25  # p = X / chromosome_len
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", default=64))
+TUNING_EPOCHS = 12
 PATIENCE = int(os.getenv("PATIENCE", default=3))
+
+# Training
+TRAIN_EPOCHS = int(os.getenv("NOF_EPOCHS", default=30))
+SAVE_MODEL_INTERVAL = int(os.getenv("SAVE_MODEL_INTERVAL", default=5))
+
+# General
+DATASET_DIR = os.getenv("DATASET_DIR", default="./data")
+MODEL_OUT_DIR = Path("artifacts")
+MODEL_OUT_DIR.mkdir(parents=True, exist_ok=True)
 def walltime_to_seconds(walltime_str):
     if walltime_str is None:
         return None
     hours, minutes, seconds = map(int, walltime_str.split(":"))
     return hours * 3600 + minutes * 60 + seconds
 WALLTIME = walltime_to_seconds(os.getenv("WALLTIME", default=None))
-SAVE_MODEL_INTERVAL = int(os.getenv("SAVE_MODEL_INTERVAL", default=5))
-# toolbox.register("mutate", tools.mutFlipBit, indpb=2 / chromosome_len)
-FLIP_BITS_WHEN_MUTATE = 25
-POP_INDIVIDUALS_SLIGHTLY_MUTATED = 3
 
-RESNET_EPOCHS = int(os.getenv("NOF_EPOCHS", default=30))
-DATASET_DIR = os.getenv("DATASET_DIR", default="./data")
 device = "cuda" if torch.cuda.is_available() else "cpu"
-MODEL_OUT_DIR = Path("artifacts")
-MODEL_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO, format="[%(asctime)s  %(name)s] %(levelname)s: %(message)s"
@@ -88,7 +92,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")
     train_parser = subparsers.add_parser("train")
-    train_parser.add_argument("--epochs", type=int, default=int(RESNET_EPOCHS))
+    train_parser.add_argument("--epochs", type=int, default=int(TRAIN_EPOCHS))
     train_parser.add_argument("--model", type=str, default=None, help="Base model path")
     train_parser.add_argument(
         "--optimizer", type=str, default=None, help="Optimizer path"
@@ -158,7 +162,7 @@ def evaluate(model, mask=None):
 def evaluate_evolution(base_model, optimizer_path, scheduler_path, individual):
     model = copy.deepcopy(base_model)
     set_mask_on(model, individual)
-    correct, total = tune(model, INDIVIDUAL_EPOCHS, optimizer_path, scheduler_path, early_stopping=True, mask=individual)
+    correct, total = tune(model, TUNING_EPOCHS, optimizer_path, scheduler_path, early_stopping=True, mask=individual)
     logger.info(f"[Evaluated] {sum(individual)}: {correct / total}")
     accuracy = float(correct) / total
     if accuracy < 0.8: # penalize anything less than 0.8, might increase
