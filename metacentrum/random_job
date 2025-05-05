@@ -10,7 +10,7 @@
 # Link to the source: https://github.com/roman-janik/diploma_thesis_program/blob/main/ner/train_ner_model.sh
 # Author: Roman Janík (https://github.com/roman-janik)
 
-#PBS -N train_resnet
+#PBS -N random_search
 #PBS -q gpu
 #PBS -l select=1:ncpus=1:ngpus=1:gpu_mem=20gb:mem=20gb:scratch_local=30gb
 #PBS -j oe

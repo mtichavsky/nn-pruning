@@ -373,7 +373,7 @@ def run_random_search(base_model, optimizer_path, scheduler_path, chromosome_len
             "size": sum(individual),
             "accuracy": accuracy
         }
-        logger.info(f"[Evaluated solution] {solution["size"]}: {solution['accuracy']}")
+        logger.info(f"[Evaluated solution] {solution['size']}: {solution['accuracy']}")
         all_solutions.append(solution)
 
         # Save intermediate results
