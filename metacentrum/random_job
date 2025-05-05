@@ -60,9 +60,9 @@ pip install --upgrade pip
 TMPDIR="../tmp" pip install torch==2.6.0 --extra-index-url https://download.pytorch.org/whl/cu113 -r requirements.txt
 
 echo "Starting the random search..."
-venv/bin/python main.py random --individuals "$INDIVIDUALS" --model "/storage/brno12-cerit/home/tichavskym/results/train-35epochs/artifacts/model.35.pth" --optimizer "/storage/brno12-cerit/home/tichavskym/results/train-35epochs/artifacts/optimizer.35.pth" --scheduler "/storage/brno12-cerit/home/tichavskym/results/train-35epochs/artifacts/scheduler.35.pth"
+venv/bin/python main.py random --individuals "$INDIVIDUALS" --model "/storage/brno12-cerit/home/tichavskym/models/model.75.pth" --optimizer "/storage/brno12-cerit/home/tichavskym/models/optimizer.75.pth" --scheduler  "/storage/brno12-cerit/home/tichavskym/models/scheduler.75.pth"
 
-output_dir="$RES_DIR/train-$(date +%Y-%m-%d-%H-%M)"
+output_dir="$RES_DIR/random-$(date +%Y-%m-%d-%H-%M)"
 echo "Saving the results into the storage directory $output_dir"
 mkdir -p "$output_dir/artifacts"
 mv artifacts/* "$output_dir/artifacts"
