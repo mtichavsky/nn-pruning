@@ -33,7 +33,7 @@ def plot_pareto_front(solutions_all, solutions_front, title):
     plt.ylabel("Accuracy")
     plt.title(title)
     plt.xlim(0, 4800)
-    # plt.ylim(0.7, 1.0)
+    # plt.ylim(0.80, 1.0)
     plt.grid(True)
     plt.legend(loc="upper left")
     plt.tight_layout()

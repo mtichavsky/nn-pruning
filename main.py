@@ -19,14 +19,16 @@ from torchvision.transforms import transforms
 from model import load_model, set_mask_on
 
 # Evolution
-POPULATION_SIZE = 8
+POPULATION_SIZE = 7
 POP_INDIVIDUALS_SLIGHTLY_MUTATED = 3
-CXPB = 0.2
+CXPB = 0.35
 # Mutate
-FLIP_BITS_WHEN_MUTATE = 25  # p = X / chromosome_len
+FLIP_BITS_WHEN_MUTATE = 18  # p = X / chromosome_len
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", default=64))
-TUNING_EPOCHS = 12
+TUNING_EPOCHS = 16
 PATIENCE = int(os.getenv("PATIENCE", default=3))
+ACCURACY_THRESHOLD = 0.85
+RANDOM_SEARCH_MINIMUM_MODEL_SIZE = 2000
 
 # Training
 TRAIN_EPOCHS = int(os.getenv("NOF_EPOCHS", default=30))
@@ -174,7 +176,7 @@ def evaluate_evolution(base_model, optimizer_path, scheduler_path, individual):
     correct, total = tune(model, TUNING_EPOCHS, optimizer_path, scheduler_path, early_stopping=True, mask=individual)
     logger.info(f"[Evaluated] {sum(individual)}: {correct / total}")
     accuracy = float(correct) / total
-    if accuracy < 0.8: # penalize anything less than 0.8, might increase
+    if accuracy < ACCURACY_THRESHOLD: # penalize anything less than 0.85, might increase
         accuracy = 0.1 * accuracy
     return sum(individual), accuracy
 
@@ -354,7 +356,7 @@ def run_random_search(base_model, optimizer_path, scheduler_path, chromosome_len
 
         # Generate a random individual
         individual = [0] * chromosome_len
-        num_ones = random.randint(0, chromosome_len)
+        num_ones = random.randint(RANDOM_SEARCH_MINIMUM_MODEL_SIZE, chromosome_len)
         ones_positions = random.sample(range(chromosome_len), num_ones)
         for pos in ones_positions:
             individual[pos] = 1
@@ -365,13 +367,14 @@ def run_random_search(base_model, optimizer_path, scheduler_path, chromosome_len
                               early_stopping=True, mask=individual)
         accuracy = float(correct) / total
 
-        if accuracy < 0.8:  # Same penalty as in evolution
+        if accuracy < ACCURACY_THRESHOLD:  # Same penalty as in evolution
             accuracy = 0.1 * accuracy
 
         solution = {
             "mask": individual,
             "size": sum(individual),
-            "accuracy": accuracy
+            "accuracy": accuracy,
+            "fitness": [sum(individual), accuracy]
         }
         logger.info(f"[Evaluated solution] {solution['size']}: {solution['accuracy']}")
         all_solutions.append(solution)
