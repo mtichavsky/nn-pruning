@@ -11,7 +11,25 @@ counts_010 = {
     12: 18,
 }
 
-counts = counts_010
+counts_011 = {
+    10: 14,
+    11: 10,
+    3: 7,
+    7: 2,
+    8: 5,
+    9: 5,
+    12: 45
+}
+
+counts_015 = {
+    10: 5,
+    11: 9,
+    7: 1,
+    8: 2,
+    9: 4,
+    12: 54,
+}
+counts = counts_015
 
 # Sort by value (x-axis)
 x = sorted(counts)

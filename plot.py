@@ -19,11 +19,13 @@ def plot_pareto_front(solutions_all, solutions_front, title):
     plt.figure(figsize=(8, 6))
 
     sizes = [sol["size"] for sol in solutions]
-    accuracies = [sol["accuracy"] for sol in solutions]
+    # accuracies = [sol["accuracy"] for sol in solutions]
+    accuracies = [sol["accuracy"] if sol["accuracy"] >= 0.8 else sol["accuracy"] * 10 for sol in solutions]
     print("Number of points: ", len(sizes))
     plt.scatter(sizes, accuracies, c="blue", label="All Solutions")
     sizes = [sol["size"] for sol in front]
-    accuracies = [sol["accuracy"] for sol in front]
+    # accuracies = [sol["accuracy"] for sol in front ]
+    accuracies = [sol["accuracy"] if sol["accuracy"] >= 0.8 else sol["accuracy"] * 10 for sol in front ]
     print("Number of points: ", len(sizes))
     plt.scatter(sizes, accuracies, c="red", label="Pareto Front")
 
@@ -31,7 +33,7 @@ def plot_pareto_front(solutions_all, solutions_front, title):
     plt.ylabel("Accuracy")
     plt.title(title)
     plt.xlim(0, 4800)
-    # plt.ylim(0.5, 1.0)
+    # plt.ylim(0.7, 1.0)
     plt.grid(True)
     plt.legend(loc="upper left")
     plt.tight_layout()
