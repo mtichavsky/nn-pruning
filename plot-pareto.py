@@ -35,7 +35,7 @@ def plot_pareto_front(solutions_all, solutions_front, title):
     plt.grid(True)
     plt.legend(loc="upper left")
     plt.tight_layout()
-    plt.savefig(solutions_all[:-5] + ".png")
+    plt.savefig(solutions_all[:-5] + ".png", dpi=600)
 
 
 if __name__ == "__main__":
