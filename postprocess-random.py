@@ -10,7 +10,7 @@ class MyFitness(Fitness):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: script.py <path_to_all_solutions>")
+        print("Usage: postprocess-random.py <path_to_all_solutions>")
         sys.exit(1)
     with open(sys.argv[1], "r") as f:
         solutions = json.load(f)
@@ -26,5 +26,5 @@ if __name__ == "__main__":
     front_indices = sortNondominated(fitness_objs, k=len(fitness_objs), first_front_only=True)[0]
     pareto_solutions = [solutions[i.idx] for i in front_indices]
 
-    with open("pareto-solutions.json", "w") as f:
+    with open("pareto_solutions.json", "w") as f:
         json.dump(pareto_solutions, f)

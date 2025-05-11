@@ -9,6 +9,7 @@ import sys
 
 import matplotlib.pyplot as plt
 
+from main import ACCURACY_THRESHOLD
 
 def plot_pareto_front(solutions_all, solutions_front, title):
     with open(solutions_all, "r") as f:
@@ -19,21 +20,18 @@ def plot_pareto_front(solutions_all, solutions_front, title):
     plt.figure(figsize=(8, 6))
 
     sizes = [sol["size"] for sol in solutions]
-    # accuracies = [sol["accuracy"] for sol in solutions]
-    accuracies = [sol["accuracy"] if sol["accuracy"] >= 0.8 else sol["accuracy"] * 10 for sol in solutions]
-    print("Number of points: ", len(sizes))
-    plt.scatter(sizes, accuracies, c="blue", label="All Solutions")
+    accuracies = [sol["accuracy"] if sol["accuracy"] >= ACCURACY_THRESHOLD else sol["accuracy"] * 10 for sol in solutions]
+    plt.scatter(sizes, accuracies, c="blue", label=f"All Solutions ({len(sizes)})")
+
     sizes = [sol["size"] for sol in front]
-    # accuracies = [sol["accuracy"] for sol in front ]
-    accuracies = [sol["accuracy"] if sol["accuracy"] >= 0.8 else sol["accuracy"] * 10 for sol in front ]
-    print("Number of points: ", len(sizes))
-    plt.scatter(sizes, accuracies, c="red", label="Pareto Front")
+    accuracies = [sol["accuracy"] if sol["accuracy"] >= ACCURACY_THRESHOLD else sol["accuracy"] * 10 for sol in front]
+    plt.scatter(sizes, accuracies, c="red", label=f"Pareto Front ({len(sizes)})")
 
     plt.xlabel("Model Size")
     plt.ylabel("Accuracy")
     plt.title(title)
-    plt.xlim(0, 4800)
-    # plt.ylim(0.80, 1.0)
+    plt.xlim(2000, 4800)
+    # plt.ylim(0.845, 0.92)
     plt.grid(True)
     plt.legend(loc="upper left")
     plt.tight_layout()

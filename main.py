@@ -92,7 +92,7 @@ def get_dataset_loaders():
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="command", required=True)
     train_parser = subparsers.add_parser("train")
     train_parser.add_argument("--epochs", type=int, default=int(TRAIN_EPOCHS))
     train_parser.add_argument("--model", type=str, default=None, help="Base model path")
