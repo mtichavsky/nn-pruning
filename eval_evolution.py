@@ -50,6 +50,8 @@ for key, value in EXPERIMENTS.items():
 # IGD
 front_indices = sortNondominated(fitness_objs, k=len(fitness_objs), first_front_only=True)[0]
 pareto_solutions = [all_sols[i.idx] for i in front_indices]
+with open("comparison_front.json", "w") as f:
+    f.write(json.dumps(pareto_solutions))
 ind = IGD(np.array([(p["fitness"][0], p["fitness"][1]) for p in pareto_solutions]))
 for key, value in EXPERIMENTS.items():
     with open(value, "r") as f:
